@@ -1940,7 +1940,6 @@ class TestLti1p3AccessTokenEndpoint(TestLtiConsumerXBlock):
         self.key = algo_obj.prepare_key(pem)
         self.public_key = rsa_key.public_key().export_key('PEM')
 
-
         self.xblock_attributes = {
             'lti_version': 'lti_1p3',
             'lti_1p3_launch_url': 'http://tool.example/launch',
