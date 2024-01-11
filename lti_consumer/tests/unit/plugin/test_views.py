@@ -11,7 +11,6 @@ from django.urls import reverse
 from edx_django_utils.cache import TieredCache, get_cache_key
 
 from Cryptodome.PublicKey import RSA
-from jwkest.jwk import RSAKey
 from opaque_keys.edx.keys import UsageKey
 from lti_consumer.data import Lti1p3LaunchData, Lti1p3ProctoringLaunchData
 from lti_consumer.models import LtiConfiguration, LtiDlContentItem

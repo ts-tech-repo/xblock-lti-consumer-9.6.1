@@ -8,11 +8,9 @@ import copy
 import json
 import math
 import time
-import sys
 import logging
 
 import jwt
-from Cryptodome.PublicKey import RSA
 
 from . import exceptions
 
@@ -103,25 +101,30 @@ class ToolKeyHandler:
         The authorization server decodes the JWT and MUST validate the values for the
         iss, sub, exp, aud and jti claims.
         """
-        try:
-            key_set = self._get_keyset()
-            if not key_set:
-                raise exceptions.NoSuitableKeys()
-            for i in range(len(key_set)):
-                try:
-                    message = jwt.decode(
-                        token,
-                        key=key_set[i],
-                        algorithms=['RS256', 'RS512',],
-                        options={'verify_signature': True}
-                    )
-                    return message
-                except Exception:
-                    if i == len(key_set) - 1:
-                        raise
-        except Exception as token_error:
-            exc_info = sys.exc_info()
-            raise jwt.InvalidTokenError(exc_info[2]) from token_error
+        key_set = self._get_keyset()
+
+        for i, obj in enumerate(key_set):
+            try:
+                if hasattr(obj, 'key'):
+                    key = obj.key
+                else:
+                    key = obj
+
+                message = jwt.decode(
+                    token,
+                    key,
+                    algorithms=['RS256', 'RS512',],
+                    options={
+                        'verify_signature': True,
+                        'verify_aud': False
+                    }
+                )
+                return message
+            except Exception:  # pylint: disable=broad-except
+                if i == len(key_set) - 1:
+                    raise
+
+        raise exceptions.NoSuitableKeys()
 
 
 class PlatformKeyHandler:
@@ -131,7 +134,7 @@ class PlatformKeyHandler:
     This class loads the platform key and is responsible for
     encoding JWT messages and exporting public keys.
     """
-    def __init__(self, key_pem, kid=None):
+    def __init__(self, key_pem, kid=None):  # pylint: disable=unused-argument
         """
         Import Key when instancing class if a key is present.
         """
@@ -187,7 +190,7 @@ class PlatformKeyHandler:
             jwk['keys'].append(json.loads(algo_obj.to_jwk(public_key)))
         return jwk
 
-    def validate_and_decode(self, token, iss=None, aud=None):
+    def validate_and_decode(self, token, iss=None, aud=None, exp=True):
         """
         Check if a platform token is valid, and return allowed scopes.
 
@@ -196,20 +199,18 @@ class PlatformKeyHandler:
         """
         if not self.key:
             raise exceptions.RsaKeyNotSet()
-        try:
-            message = jwt.decode(
-                token,
-                key=self.key.public_key(),
-                audience=aud,
-                issuer=iss,
-                algorithms=['RS256', 'RS512'],
-                options={
-                    'verify_signature': True,
-                    'verify_aud': True if aud else False
-                }
-            )
-            return message
 
-        except Exception as token_error:
-            exc_info = sys.exc_info()
-            raise jwt.InvalidTokenError(exc_info[2]) from token_error
+        message = jwt.decode(
+            token,
+            key=self.key.public_key(),
+            audience=aud,
+            issuer=iss,
+            algorithms=['RS256', 'RS512'],
+            options={
+                'verify_signature': True,
+                'verify_exp': bool(exp),
+                'verify_iss': bool(iss),
+                'verify_aud': bool(aud)
+            }
+        )
+        return message

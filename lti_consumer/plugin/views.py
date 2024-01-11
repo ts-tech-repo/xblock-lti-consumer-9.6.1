@@ -469,22 +469,24 @@ def access_token_endpoint(
             ))
         )
         return JsonResponse(token)
-    except Exception as token_error:
+    except Exception:  # pylint: disable=broad-except
         exc_info = sys.exc_info()
 
         # Handle errors and return a proper response
         if exc_info[0] == MissingRequiredClaim:
             # Missing request attributes
             return JsonResponse({"error": "invalid_request"}, status=HTTP_400_BAD_REQUEST)
-        elif exc_info[0] in (MalformedJwtToken, TokenSignatureExpired, jwt.InvalidTokenError):
+        elif exc_info[0] in (MalformedJwtToken, TokenSignatureExpired, jwt.exceptions.DecodeError):
             # Triggered when a invalid grant token is used
             return JsonResponse({"error": "invalid_grant"}, status=HTTP_400_BAD_REQUEST)
-        elif exc_info[0] == UnsupportedGrantType:
-            return JsonResponse({"error": "unsupported_grant_type"}, status=HTTP_400_BAD_REQUEST)
-        else:
+        elif exc_info[0] in (NoSuitableKeys, UnknownClientId, jwt.exceptions.InvalidSignatureError):
             # Client ID is not registered in the block or
             # isn't possible to validate token using available keys.
             return JsonResponse({"error": "invalid_client"}, status=HTTP_400_BAD_REQUEST)
+        elif exc_info[0] == UnsupportedGrantType:
+            return JsonResponse({"error": "unsupported_grant_type"}, status=HTTP_400_BAD_REQUEST)
+        else:
+            return JsonResponse({"error": "unidentified_error"}, status=HTTP_400_BAD_REQUEST)
 
 
 # Post from external tool that doesn't
@@ -565,7 +567,7 @@ def deep_linking_response_endpoint(request, lti_config_id=None):
             status=400
         )
     # Bad JWT message, invalid token, or any other message validation issues
-    except (Lti1p3Exception, PermissionDenied) as exc:
+    except (Lti1p3Exception, PermissionDenied, jwt.exceptions.DecodeError) as exc:
         log.warning(
             "Permission on LTI Config %r denied for user %r: %s",
             lti_config,
@@ -865,7 +867,7 @@ def start_proctoring_assessment_endpoint(request):
 
     try:
         decoded_jwt = jwt.decode(token, options={'verify_signature': False})
-    except Exception:
+    except Exception:  # pylint: disable=broad-except
         return render(request, 'html/lti_proctoring_start_error.html', status=HTTP_400_BAD_REQUEST)
 
     iss = decoded_jwt.get('iss')

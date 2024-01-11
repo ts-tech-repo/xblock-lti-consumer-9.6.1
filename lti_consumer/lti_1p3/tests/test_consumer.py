@@ -8,7 +8,6 @@ import uuid
 
 import ddt
 import jwt
-import sys
 from Cryptodome.PublicKey import RSA
 from django.conf import settings
 from django.test.testcases import TestCase
@@ -115,18 +114,18 @@ class TestLti1p3Consumer(TestCase):
 
     def _decode_token(self, token):
         """
-        Checks for a valid signarute and decodes JWT signed LTI message
+        Checks for a valid signature and decodes JWT signed LTI message
 
         This also tests the public keyset function.
         """
         public_keyset = self.lti_consumer.get_public_keyset()
         keyset = PyJWKSet.from_dict(public_keyset).keys
 
-        for i in range(len(keyset)):
+        for i, obj in enumerate(keyset):
             try:
                 message = jwt.decode(
                     token,
-                    key=keyset[i].key,
+                    key=obj.key,
                     algorithms=['RS256', 'RS512'],
                     options={
                         'verify_signature': True,
@@ -134,11 +133,11 @@ class TestLti1p3Consumer(TestCase):
                     }
                 )
                 return message
-            except Exception as token_error:
-                if i < len(keyset) - 1:
-                    continue
-                exc_info = sys.exc_info()
-                raise jwt.InvalidTokenError(exc_info[2]) from token_error
+            except Exception:  # pylint: disable=broad-except
+                if i == len(keyset) - 1:
+                    raise
+
+        return exceptions.NoSuitableKeys()
 
     @ddt.data(
         ({"client_id": CLIENT_ID, "redirect_uri": LAUNCH_URL, "nonce": STATE, "state": STATE}, True),
