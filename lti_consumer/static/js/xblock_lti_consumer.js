@@ -200,7 +200,7 @@ function LtiConsumerXBlock(runtime, element) {
                 msg += '\n\n' + gettext('Click Cancel to return to this page without sending your information.');
             }
 
-            $.when(confirmDialog(msg, $(this), showCancelButton)).then(onSuccess);
+            //$.when(confirmDialog(msg, $(this), showCancelButton)).then(onSuccess);
         }
 
         // Render consent dialog for inline elements immediately.
