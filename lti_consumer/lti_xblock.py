@@ -98,6 +98,12 @@ DOCS_ANCHOR_TAG_OPEN = (
     "/projects/open-edx-building-and-running-a-course/en/latest/exercises_tools/lti_component.html"
     "'>"
 )
+
+MOODLE_TAG_OPEN = (
+    "<a rel='noopener' target='_blank' "
+    "href='/extras/get_moodle_login_url/'>"
+)
+
 RESULT_SERVICE_SUFFIX_PARSER = re.compile(r"^user/(?P<anon_id>[\w-]+)", re.UNICODE)
 LTI_1P1_ROLE_MAP = {
     'student': 'Student,Learner',
@@ -444,10 +450,10 @@ class LtiConsumerXBlock(StudioEditableXBlockMixin, XBlock):
             "LTI Passports setting on the Advanced Settings page."
             "<br />See the {docs_anchor_open}edX LTI documentation{anchor_close} for more details on this setting."
         ).format(
-            docs_anchor_open=DOCS_ANCHOR_TAG_OPEN,
+            docs_anchor_open=MOODLE_TAG_OPEN,
             anchor_close="</a>"
         ),
-        default='',
+        default='MOODLE',
         scope=Scope.settings
     )
     launch_url = String(
@@ -583,7 +589,7 @@ class LtiConsumerXBlock(StudioEditableXBlockMixin, XBlock):
         display_name=_("Request user's username"),
         # Translators: This is used to request the user's username for a third party service.
         help=_("Select True to request the user's username."),
-        default=False,
+        default=True,
         scope=Scope.settings
     )
     ask_to_send_full_name = Boolean(
@@ -597,7 +603,7 @@ class LtiConsumerXBlock(StudioEditableXBlockMixin, XBlock):
         display_name=_("Request user's email"),
         # Translators: This is used to request the user's email for a third party service.
         help=_("Select True to request the user's email address."),
-        default=False,
+        default=True,
         scope=Scope.settings
     )
 
