@@ -615,6 +615,14 @@ class LtiConsumerXBlock(StudioEditableXBlockMixin, XBlock):
         scope=Scope.settings
     )
 
+    completion_time = Integer(
+        display_name = _("Completion Time in MilliSeconds"),
+        help = _("The completion time to show completion popup."),
+        default = 5000,
+        scope = Scope.settings
+    )
+
+
     # Possible editable fields
     editable_field_names = (
         'display_name', 'description', 'config_type', 'lti_version', 'external_config',
@@ -630,7 +638,7 @@ class LtiConsumerXBlock(StudioEditableXBlockMixin, XBlock):
         # Other parameters
         'custom_parameters', 'launch_target', 'button_text', 'inline_height', 'modal_height',
         'modal_width', 'has_score', 'weight', 'hide_launch', 'accept_grades_past_due',
-        'ask_to_send_username', 'ask_to_send_full_name', 'ask_to_send_email', 'enable_processors',
+        'ask_to_send_username', 'ask_to_send_full_name', 'ask_to_send_email', 'enable_processors', 'completion_time',
     )
 
     # Author view
