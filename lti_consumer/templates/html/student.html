@@ -6,7 +6,7 @@
 % if has_score and weight:
     <div class="problem-progress">
         % if module_score is not None:
-            (${"{points} / {total_points} points".format(points=module_score, total_points=weight)})
+            (${"{points} / {total_points} points".format(points=round(module_score, 2), total_points=weight)})
         % else:
             (${"{total_points} points possible".format(total_points=weight)})
         % endif
