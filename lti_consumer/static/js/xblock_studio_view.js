@@ -151,7 +151,7 @@ function LtiConsumerXBlockInitStudio(runtime, element) {
             toggleFieldVisibility(field, false);
         }
     }
-    
+
     console.log('Hi from xblock-lti-consumer-9.6.1 xblock_studio_view.js');
     // Call once component is instanced to hide fields
     toggleLtiFields();
@@ -169,4 +169,9 @@ function LtiConsumerXBlockInitStudio(runtime, element) {
     $(element).find('#xb-field-edit-config_type').bind('change', function () {
         toggleLtiFields();
     });
+
+    $(element).find('#xb-field-edit-lti_1p3_launch_url').bind('input', function () {
+        console.log($(this).val());
+    });
+    
 }
