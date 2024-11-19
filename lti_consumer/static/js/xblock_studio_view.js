@@ -153,48 +153,6 @@ function LtiConsumerXBlockInitStudio(runtime, element) {
     }
     
     console.log('Hi from xblock-lti-consumer-9.6.1 xblock_studio_view.js');
-
-    function fetchLtiToolUrls(courseShortName, callback) {
-        // Fetch data from the API using a POST request
-        $.ajax({
-            url: window.location.hostname + "/extras/get_lti_tool_urls",
-            method: "POST",
-            data: {
-                course_shortName: courseShortName
-            },
-            success: function (response) {
-                if (response.ltiTools) {
-                    callback(response.ltiTools);
-                } else {
-                    console.log("Invalid API response format:", response);
-                }
-            },
-            error: function (error) {
-                console.log("Error fetching LTI tool URLs:", error);
-            }
-        });
-    }
-
-    function populateDropdown(fieldSelector, tools) {
-        // Populate the dropdown field with tools data
-        const field = $(fieldSelector);
-        field.empty(); // Clear existing options
-    
-        // Add an empty option as a placeholder
-        field.append(new Option("-- Select a tool --", ""));
-    
-        tools.forEach(function (tool) {
-            field.append(new Option(tool.tool_name, tool.tool_url));
-        });
-    }
-    
-    function filterTools(tools, searchText) {
-        // Filter tools based on search text (case-insensitive)
-        return tools.filter(tool => 
-            tool.tool_name.toLowerCase().includes(searchText.toLowerCase())
-        );
-    }
-
     // Call once component is instanced to hide fields
     toggleLtiFields();
 
@@ -211,25 +169,4 @@ function LtiConsumerXBlockInitStudio(runtime, element) {
     $(element).find('#xb-field-edit-config_type').bind('change', function () {
         toggleLtiFields();
     });
-    
-    $(document).ready(function () {
-        const courseShortName = "TC1559|test_course";
-        const dropdownSelector = "#xb-field-edit-lti_tool_urls"; 
-        const searchBoxSelector = "#xb-field-edit-lti_tool_urls"; 
-        let fetchedTools = [];
-    
-        // Fetch data and populate dropdown on load
-        fetchLtiToolUrls(courseShortName, function (tools) {
-            fetchedTools = tools; // Save the fetched tools
-            populateDropdown(dropdownSelector, fetchedTools); // Populate the dropdown
-        });
-    
-        // Bind keyup event to dynamically filter and update dropdown
-        $(searchBoxSelector).on("keyup", function () {
-            const searchText = $(this).val(); // Get the current input text
-            const filteredTools = filterTools(fetchedTools, searchText);
-            populateDropdown(dropdownSelector, filteredTools);
-        });
-    });
-    
 }
