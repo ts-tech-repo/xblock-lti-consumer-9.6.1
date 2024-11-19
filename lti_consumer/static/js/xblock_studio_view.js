@@ -157,7 +157,7 @@ function LtiConsumerXBlockInitStudio(runtime, element) {
     function fetchLtiToolUrls(courseShortName, callback) {
         // Fetch data from the API using a POST request
         $.ajax({
-            url: window.location.hostname + "/extras/get_lti_tool_urls",
+            url: "https://" + window.location.hostname + "/extras/get_lti_tool_urls",
             method: "POST",
             data: {
                 course_shortName: courseShortName
