@@ -173,5 +173,7 @@ function LtiConsumerXBlockInitStudio(runtime, element) {
     $(element).find('#xb-field-edit-lti_1p3_launch_url').bind('input', function () {
         console.log($(this).val());
     });
+
+    console.log("End of xblock_studio_view.js");
     
 }
