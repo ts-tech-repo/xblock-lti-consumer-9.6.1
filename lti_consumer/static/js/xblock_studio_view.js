@@ -222,7 +222,7 @@ function LtiConsumerXBlockInitStudio(runtime, element) {
     // Fetch data and populate dropdown on load
     fetchLtiToolUrls(courseShortName, function (tools) {
         fetchedTools = tools; // Save the fetched tools
-        populateDropdown(dropdownSelector, fetchedTools); // Populate the dropdown
+        console.log(populateDropdown(dropdownSelector, fetchedTools)); // Populate the dropdown
     });
     
     // Bind keyup event to dynamically filter and update dropdown
