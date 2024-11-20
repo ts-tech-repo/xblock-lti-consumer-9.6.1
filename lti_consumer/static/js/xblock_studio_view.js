@@ -206,7 +206,7 @@ function LtiConsumerXBlockInitStudio(runtime, element) {
             autoFocus: true,
             delay: 200, 
             select: function (event, ui) {
-                $(dropdownSelector).val(ui.item.value);
+                $(searchBoxSelector).val(ui.item.value);
                 console.log("Selected tool:", ui.item);
             }
         }).on("input", function () {
