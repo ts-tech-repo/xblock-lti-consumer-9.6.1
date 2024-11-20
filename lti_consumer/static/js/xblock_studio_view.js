@@ -154,46 +154,70 @@ function LtiConsumerXBlockInitStudio(runtime, element) {
     
     console.log('Hi from xblock-lti-consumer-9.6.1 xblock_studio_view.js');
 
-    function fetchLtiToolUrls(courseShortName, callback) {
-        // Fetch data from the API using a POST request
-        $.ajax({
-            url: "https://" + window.location.hostname + "/extras/get_lti_tool_urls",
-            method: "POST",
-            data: {
-                course_shortName: courseShortName
-            },
-            success: function (response) {
-                console.log(response);
-                if (response.ltiTools) {
-                    callback(response.ltiTools);
-                } else {
-                    console.log("Invalid API response format:", response);
+    function initializeLtiToolAutocomplete() {
+        const searchBoxSelector = "#xb-field-edit-launch_url"; // Selector for the launch URL input box
+        const dropdownSelector = "#xb-field-edit-lti_tool_urls"; // Selector for the dropdown field
+    
+        let storedLtiTools = []; // To store the fetched tools
+    
+        // Fetch tools based on course_shortName and store them
+        function fetchLtiTools(courseShortName, callback) {
+            const api_url = "https://" + window.location.hostname + "/extras/get_lti_tool_urls";
+            $.ajax({
+                type: "POST",
+                url: api_url,
+                data: {
+                    course_shortName: courseShortName
+                },
+                success: function (data) {
+                    if (data.ltiTools) {
+                        storedLtiTools = data.ltiTools; // Store the response
+                        console.log(storedLtiTools);
+                        callback(storedLtiTools); // Invoke callback with the data
+                    } else {
+                        console.error("Invalid API response:", data);
+                        callback([]);
+                    }
+                },
+                error: function (error) {
+                    console.error("Error fetching LTI tools:", error);
+                    callback([]);
                 }
+            });
+        }
+    
+        // Filter stored tools based on the search term
+        function filterTools(searchTerm) {
+            return storedLtiTools.filter(tool =>
+                tool.tool_name.toLowerCase().includes(searchTerm.toLowerCase())
+            ).map(tool => ({
+                label: tool.tool_name, 
+                value: tool.tool_url  
+            }));
+        }
+    
+        $(searchBoxSelector).autocomplete({
+            source: function (request, response) {
+                // Filter stored tools based on the user's input
+                const filteredTools = filterTools(request.term);
+                response(filteredTools);
             },
-            error: function (error) {
-                console.log("Error fetching LTI tool URLs:", error);
+            minLength: 2,
+            autoFocus: true,
+            delay: 200, 
+            select: function (event, ui) {
+                $(dropdownSelector).val(ui.item.value);
+                console.log("Selected tool:", ui.item);
             }
+        }).on("input", function () {
+            $(this).autocomplete("search");
         });
-    }
-
-    function populateDropdown(fieldSelector, tools) {
-        // Populate the dropdown field with tools data
-        const field = $(fieldSelector);
-        field.empty(); // Clear existing options
     
-        // Add an empty option as a placeholder
-        field.append(new Option("-- Select a tool --", ""));
-    
-        tools.forEach(function (tool) {
-            field.append(new Option(tool.tool_name, tool.tool_url));
+        // Fetch tools on load using course_shortName
+        const courseShortName = window.location.href.split("+")[1] + "|" + window.location.href.split("+")[2];
+        fetchLtiTools(courseShortName, function () {
+            console.log("Fetched LTI tools:", storedLtiTools);
         });
-    }
-    
-    function filterTools(tools, searchText) {
-        // Filter tools based on search text (case-insensitive)
-        return tools.filter(tool => 
-            tool.tool_name.toLowerCase().includes(searchText.toLowerCase())
-        );
     }
 
     // Call once component is instanced to hide fields
@@ -207,29 +231,9 @@ function LtiConsumerXBlockInitStudio(runtime, element) {
     // Bind to onChange method of lti_1p3_tool_key_mode selector
     $(element).find('#xb-field-edit-lti_1p3_tool_key_mode').bind('change', function () {
         toggleLtiFields();
-    });
+    }); 
 
-    $(element).find('#xb-field-edit-config_type').bind('change', function () {
-        toggleLtiFields();
-    });
-    
-    const block_url = window.location.href;
-    const courseShortName = block_url.split("+")[1] + "|" + block_url.split("+")[2];
-    const dropdownSelector = "#xb-field-edit-lti_tool_urls"; 
-    const searchBoxSelector = "#xb-field-edit-lti_tool_urls"; 
-    let fetchedTools = [];
-    
-    // Fetch data and populate dropdown on load
-    fetchLtiToolUrls(courseShortName, function (tools) {
-        fetchedTools = tools; // Save the fetched tools
-        console.log(populateDropdown(dropdownSelector, fetchedTools)); // Populate the dropdown
-    });
-    
-    // Bind keyup event to dynamically filter and update dropdown
-    $(searchBoxSelector).on("keyup", function () {
-        const searchText = $(this).val(); // Get the current input text
-        const filteredTools = filterTools(fetchedTools, searchText);
-        populateDropdown(dropdownSelector, filteredTools);
-    });
-    
+    if ($('#xb-field-edit-launch_url').length > 0) {
+        initializeLtiToolAutocomplete();
+    }
 }
