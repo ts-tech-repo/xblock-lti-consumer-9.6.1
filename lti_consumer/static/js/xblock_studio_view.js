@@ -156,7 +156,7 @@ function LtiConsumerXBlockInitStudio(runtime, element) {
 
     function initializeLtiToolAutocomplete() {
         const searchBoxSelector = "#xb-field-edit-launch_url"; // Selector for the launch URL input box
-        const dropdownSelector = "#xb-field-edit-lti_tool_urls"; // Selector for the dropdown field
+        //const dropdownSelector = "#xb-field-edit-lti_tool_urls"; // Selector for the dropdown field
     
         let storedLtiTools = []; // To store the fetched tools
     
