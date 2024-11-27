@@ -156,6 +156,7 @@ function LtiConsumerXBlockInitStudio(runtime, element) {
 
     function initializeLtiToolAutocomplete() {
         const searchBoxSelector = "#xb-field-edit-launch_url"; // Selector for the launch URL input box
+        const weightFieldSelector = "#xb-field-edit-weight";
         //const dropdownSelector = "#xb-field-edit-lti_tool_urls"; // Selector for the dropdown field
     
         let storedLtiTools = []; // To store the fetched tools
@@ -208,6 +209,7 @@ function LtiConsumerXBlockInitStudio(runtime, element) {
             delay: 200, 
             select: function (event, ui) {
                 $(searchBoxSelector).val(ui.item.value);
+                $(weightFieldSelector).val(ui.item.grade);
                 console.log("Selected tool:", ui.item);
             }
         }).on("input", function () {
