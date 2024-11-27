@@ -214,6 +214,10 @@ function LtiConsumerXBlockInitStudio(runtime, element) {
             }
         }).on("input", function () {
             $(this).autocomplete("search");
+            //defaults to 1.0 weight field if search term is empty
+            if ($(this).val().trim() === "") {
+                $(weightFieldSelector).val("1.0");
+            }
         });
     
         // Fetch tools on load using course_shortName
