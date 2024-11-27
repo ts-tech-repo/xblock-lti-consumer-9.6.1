@@ -200,21 +200,26 @@ function LtiConsumerXBlockInitStudio(runtime, element) {
     
         $(searchBoxSelector).autocomplete({
             source: function (request, response) {
-                // Filter stored tools based on the user's input
                 const filteredTools = filterTools(request.term);
                 response(filteredTools);
             },
             minLength: 2,
             autoFocus: true,
-            delay: 200, 
+            delay: 200,
             select: function (event, ui) {
-                $(searchBoxSelector).val(ui.item.value);
-                $(weightFieldSelector).val(ui.item.grade);
+                $(searchBoxSelector).val(ui.item.value); // Update search box
                 console.log("Selected tool:", ui.item);
+                
+                // Check if grade exists and update weight field
+                if (ui.item.grade !== null) {
+                    $(weightFieldSelector).val(ui.item.grade).trigger("change");
+                } else {
+                    console.log("Grade is null for the selected item.");
+                }
             }
         }).on("input", function () {
             $(this).autocomplete("search");
-        });
+        });        
     
         // Fetch tools on load using course_shortName
         const courseShortName = window.location.href.split("+")[1] + "|" + window.location.href.split("+")[2];
