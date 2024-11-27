@@ -542,7 +542,7 @@ class LtiConsumerXBlock(StudioEditableXBlockMixin, XBlock):
     has_score = Boolean(
         display_name=_("Scored"),
         help=_("Select True if this component will receive a numerical score from the external LTI system."),
-        default=False,
+        default=True,
         scope=Scope.settings
     )
     weight = Float(
