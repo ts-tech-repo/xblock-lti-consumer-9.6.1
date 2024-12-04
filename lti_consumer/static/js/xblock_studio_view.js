@@ -152,7 +152,6 @@ function LtiConsumerXBlockInitStudio(runtime, element) {
         }
     }
     
-    console.log('Hi from xblock-lti-consumer-9.6.1 xblock_studio_view.js');
 
     function initializeLtiToolAutocomplete() {
         const searchBoxSelector = "#xb-field-edit-launch_url"; // Selector for the launch URL input box
