@@ -240,6 +240,10 @@ function LtiConsumerXBlockInitStudio(runtime, element) {
         toggleLtiFields();
     }); 
 
+    $(element).find('#xb-field-edit-config_type').bind('change', function () {
+        toggleLtiFields();
+    });
+
     if ($('#xb-field-edit-launch_url').length > 0) {
         initializeLtiToolAutocomplete();
     }
