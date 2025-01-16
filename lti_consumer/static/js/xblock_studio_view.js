@@ -247,4 +247,8 @@ function LtiConsumerXBlockInitStudio(runtime, element) {
     if ($('#xb-field-edit-launch_url').length > 0) {
         initializeLtiToolAutocomplete();
     }
+
+    $(element).find('.xblock-actions .save-button').on('click', function (e) {
+        console.log("Save button clicked!");
+    });
 }
