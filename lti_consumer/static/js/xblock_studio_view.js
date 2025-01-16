@@ -249,6 +249,8 @@ function LtiConsumerXBlockInitStudio(runtime, element) {
     }
 
     $(element).find('.xblock-actions .save-button').on('click', function (e) {
-        console.log("Save button clicked!");
+        const learnerurl = document.querySelector('.action-item .button-view').href;
+        console.log(learnerurl);
+        console.log('save button clicked');
     });
 }
