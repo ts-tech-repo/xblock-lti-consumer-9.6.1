@@ -249,8 +249,26 @@ function LtiConsumerXBlockInitStudio(runtime, element) {
     }
 
     $(element).find('.xblock-actions .save-button').on('click', function (e) {
-        const learnerurl = document.querySelector('.action-item .button-view').href;
+        const lms_url = document.querySelector('.action-item .button-view').href;
         console.log(learnerurl);
+        const selected_tool = $(element).find('#xb-field-edit-launch_url').val();
+        if (selected_tool) {
+            const update_moodle_block_url = "https://" + window.location.hostname + "/extras/update_moodle_block_url";
+            $.ajax({
+                type: "POST",
+                url: update_moodle_block_url,
+                data: {
+                    lms_url: lms_url,
+                    selected_tool: selected_tool
+                },
+                success: function (data) {
+                    console.log(data);
+                },
+                error: function (error) {
+                    console.error("Error while updating moodle block url:", error);
+                }
+            });
+        }
         console.log('save button clicked');
     });
 }
