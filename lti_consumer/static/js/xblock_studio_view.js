@@ -250,7 +250,6 @@ function LtiConsumerXBlockInitStudio(runtime, element) {
 
     $(element).find('.xblock-actions .save-button').on('click', function (e) {
         const lms_url = document.querySelector('.action-item .button-view').href;
-        console.log(lms_url);
         const selected_tool = $(element).find('#xb-field-edit-launch_url').val();
         if (selected_tool) {
             const update_moodle_block_url = "https://" + window.location.hostname + "/extras/update_moodle_block_url";
@@ -269,6 +268,5 @@ function LtiConsumerXBlockInitStudio(runtime, element) {
                 }
             });
         }
-        console.log('save button clicked');
     });
 }
