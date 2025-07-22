@@ -16,5 +16,5 @@ metadata:
 spec:
   type: XBlock
   lifecycle: production
-  owner: ~
+  owner: "user:Faraz32123"
   subcomponentOf: LTI

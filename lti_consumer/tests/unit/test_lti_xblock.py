@@ -9,14 +9,15 @@ from itertools import product
 from unittest.mock import Mock, PropertyMock, patch
 
 import ddt
+import jwt
 from Cryptodome.PublicKey import RSA
 from django.conf import settings as dj_settings
 from django.test import override_settings
 from django.test.testcases import TestCase
 from django.utils import timezone
-from jwkest.jwk import RSAKey, KEYS
 from xblock.validation import Validation
 
+from jwt.api_jwk import PyJWK, PyJWKSet
 from lti_consumer.exceptions import LtiError
 
 from lti_consumer.api import config_id_for_block
@@ -60,6 +61,17 @@ class TestLtiConsumerXBlock(TestCase):
         )
         self.addCleanup(track_event_patcher.stop)
         track_event_patcher.start()
+
+        # Patch calls to lms/openedx compatibility layer
+        compat_patcher = patch("lti_consumer.lti_xblock.compat")
+        self.addCleanup(compat_patcher.stop)
+        self.compat = compat_patcher.start()
+        course = Mock(name="course")
+        course.display_name_with_default = "course_display_name"
+        course.display_org_with_default = "course_display_org"
+        self.compat.get_course_by_id.return_value = course
+        self.compat.get_user_role.return_value = "student"
+        self.compat.get_external_id_for_user.return_value = "12345"
 
 
 class TestIndexibility(TestCase):
@@ -305,15 +317,43 @@ class TestProperties(TestLtiConsumerXBlock):
         with self.assertRaises(LtiError):
             _ = self.xblock.role
 
+    def test_user_is_staff(self):
+        """
+        Test `user_is_staff` returns the correct status from the user service
+        """
+        fake_user = Mock()
+        fake_user.opt_attrs = {
+            'edx-platform.user_is_staff': True,
+            'edx-platform.is_authenticated': True,
+        }
+        self.xblock.runtime.service(self, 'user').get_current_user = Mock(return_value=fake_user)
+        self.assertTrue(self.xblock.user_is_staff)
+
+        fake_user.opt_attrs = {
+            'edx-platform.user_is_staff': False,
+            'edx-platform.is_authenticated': True,
+        }
+        self.xblock.runtime.service(self, 'user').get_current_user = Mock(return_value=fake_user)
+        self.assertFalse(self.xblock.user_is_staff)
+
+        fake_user.opt_attrs = {
+            'edx-platform.is_authenticated': True,
+        }
+        self.xblock.runtime.service(self, 'user').get_current_user = Mock(return_value=fake_user)
+        self.assertFalse(self.xblock.user_is_staff)
+
+        fake_user.opt_attrs = {}
+        self.xblock.runtime.service(self, 'user').get_current_user = Mock(return_value=fake_user)
+        self.assertFalse(self.xblock.user_is_staff)
+
     def test_course(self):
         """
-        Test `course` calls modulestore.get_course
+        Test `course` calls compat.get_course_by_id
         """
-        mock_get_course = self.xblock.runtime.modulestore.get_course
-        mock_get_course.return_value = None
+        self.compat.get_course_by_id.return_value = None
         course = self.xblock.course
 
-        self.assertTrue(mock_get_course.called)
+        self.assertTrue(self.compat.get_course_by_id.called)
         self.assertIsNone(course)
 
     @patch('lti_consumer.lti_xblock.LtiConsumerXBlock.course')
@@ -1743,10 +1783,15 @@ class TestLtiConsumer1p3XBlock(TestCase):
 
         self.mock_filter_enabled_patcher = patch("lti_consumer.lti_xblock.external_config_filter_enabled")
         self.mock_database_config_enabled_patcher = patch("lti_consumer.lti_xblock.database_config_enabled")
+        self.mock_external_multiple_launch_urls_enabled = patch(
+            "lti_consumer.lti_xblock.external_multiple_launch_urls_enabled"
+        )
         self.mock_filter_enabled = self.mock_filter_enabled_patcher.start()
         self.mock_database_config_enabled = self.mock_database_config_enabled_patcher.start()
+        self.mock_external_multiple_launch_urls_enabled.start()
         self.addCleanup(self.mock_filter_enabled_patcher.stop)
         self.addCleanup(self.mock_database_config_enabled_patcher.stop)
+        self.addCleanup(self.mock_external_multiple_launch_urls_enabled.stop)
 
     @patch.object(LtiConsumerXBlock, 'get_parameter_processors')
     @patch('lti_consumer.lti_xblock.resolve_custom_parameter_template')
@@ -1924,6 +1969,87 @@ class TestLtiConsumer1p3XBlock(TestCase):
         self.assertIn("mock-keyset_url", response.content)
         self.assertIn("mock-token_url", response.content)
 
+    @patch('lti_consumer.lti_xblock.LtiConsumerXBlock.get_lti_1p3_launch_data')
+    @patch('lti_consumer.api.get_lti_1p3_content_url')
+    def test_student_view(self, mock_get_lti_1p3_content_url, mock_get_lti_1p3_launch_data):
+        """
+        Test that the student view is displayed as expected
+        """
+        # Mock lti data, i18n, and user services before rendering
+        mock_get_lti_1p3_content_url.return_value = 'lti_1p3_content_url'
+        mock_get_lti_1p3_launch_data.return_value = None
+        fake_user = Mock()
+        fake_user.opt_attrs = {
+            'edx-platform.is_authenticated': True,
+        }
+        fake_user.emails = ['student@example.com']
+        fake_service = Mock()
+        fake_service.get_current_user = Mock(return_value=fake_user)
+
+        def mock_service(_runtime, service_name):
+            """
+            Mock the user and i18n services
+            """
+            if service_name == 'user':
+                return fake_service
+            return None
+
+        self.xblock.runtime.service = Mock(side_effect=mock_service)
+
+        response = self.xblock.student_view({})
+        self.assertEqual(response.js_init_fn, 'LtiConsumerXBlock')
+        self.assertNotIn("LTI 1.3 Launches can only be performed from the LMS", response.content)
+
+    @patch('lti_consumer.lti_xblock.LtiConsumerXBlock.get_lti_1p3_launch_data')
+    @patch('lti_consumer.api.get_lti_1p3_launch_info')
+    @patch('lti_consumer.api.get_lti_1p3_content_url')
+    def test_student_view_for_staff(
+        self,
+        mock_get_lti_1p3_content_url,
+        mock_get_launch_info,
+        mock_get_lti_1p3_launch_data,
+    ):
+        """
+        Test that the author view content is displayed with the student view when viewed by a staff user.
+        """
+        # Mock lti data, i18n, and user services before rendering
+        mock_get_lti_1p3_content_url.return_value = 'lti_1p3_content_url'
+        mock_get_lti_1p3_launch_data.return_value = None
+        mock_get_launch_info.return_value = {
+            'config_id': "mock-config_id",
+            'client_id': "mock-client_id",
+            'keyset_url': "mock-keyset_url",
+            'deployment_id': '1',
+            'oidc_callback': "mock-oidc_callback",
+            'token_url': "mock-token_url",
+        }
+        fake_user = Mock()
+        fake_user.opt_attrs = {
+            'edx-platform.user_is_staff': True,
+            'edx-platform.is_authenticated': True,
+        }
+        fake_user.emails = ['staff@example.com']
+        fake_service = Mock()
+        fake_service.get_current_user = Mock(return_value=fake_user)
+
+        def mock_service(_runtime, service_name):
+            """
+            Mock the user and i18n services
+            """
+            if service_name == 'user':
+                return fake_service
+            return None
+
+        self.xblock.runtime.service = Mock(side_effect=mock_service)
+
+        # Student view with staff user shows author params
+        response = self.xblock.student_view({})
+        self.assertEqual(response.js_init_fn, 'LtiConsumerXBlock')
+        self.assertIn("LTI 1.3 Launches can only be performed from the LMS", response.content)
+        self.assertIn("mock-client_id", response.content)
+        self.assertIn("mock-keyset_url", response.content)
+        self.assertIn("mock-token_url", response.content)
+
 
 class TestLti1p3AccessTokenEndpoint(TestLtiConsumerXBlock):
     """
@@ -1935,11 +2061,12 @@ class TestLti1p3AccessTokenEndpoint(TestLtiConsumerXBlock):
         self.rsa_key_id = "1"
         # Generate RSA and save exports
         rsa_key = RSA.generate(2048)
-        self.key = RSAKey(
-            key=rsa_key,
-            kid=self.rsa_key_id
-        )
-        self.public_key = rsa_key.publickey().export_key()
+        algo_obj = jwt.get_algorithm_by_name('RS256')
+        private_key = algo_obj.prepare_key(rsa_key.export_key())
+        private_jwk = json.loads(algo_obj.to_jwk(private_key))
+        private_jwk['kid'] = self.rsa_key_id
+        self.key = PyJWK.from_dict(private_jwk)
+        self.public_key = rsa_key.public_key().export_key('PEM')
 
         self.xblock_attributes = {
             'lti_version': 'lti_1p3',
@@ -2019,8 +2146,8 @@ class TestLti1p3AccessTokenEndpoint(TestLtiConsumerXBlock):
         self.xblock.lti_1p3_tool_public_key = ''
         self.xblock.save()
 
-        jwt = create_jwt(self.key, {})
-        request = make_jwt_request(jwt)
+        jwt_token = create_jwt(self.key, {})
+        request = make_jwt_request(jwt_token)
         response = self.xblock.lti_1p3_access_token(request)
         self.assertEqual(response.status_code, 400)
         self.assertJSONEqual(response.content, {'error': 'invalid_client'})
@@ -2029,8 +2156,8 @@ class TestLti1p3AccessTokenEndpoint(TestLtiConsumerXBlock):
         """
         Test request with valid JWT.
         """
-        jwt = create_jwt(self.key, {})
-        request = make_jwt_request(jwt)
+        jwt_token = create_jwt(self.key, {})
+        request = make_jwt_request(jwt_token)
         response = self.xblock.lti_1p3_access_token(request)
         self.assertEqual(response.status_code, 200)
 
@@ -2123,10 +2250,15 @@ class TestLti1p3AccessTokenJWK(TestCase):
             'lti_1p3_tool_keyset_url': "http://tool.example/keyset",
         })
 
-        self.key = RSAKey(key=RSA.generate(2048), kid="1")
+        rsa_key = RSA.generate(2048).export_key('PEM')
+        self.algo_obj = jwt.get_algorithm_by_name('RS256')
+        private_key = self.algo_obj.prepare_key(rsa_key)
+        private_jwk = json.loads(self.algo_obj.to_jwk(private_key))
+        private_jwk['kid'] = '1'
+        self.key = PyJWK.from_dict(private_jwk)
 
-        jwt = create_jwt(self.key, {})
-        self.request = make_jwt_request(jwt)
+        jwt_token = create_jwt(self.key, {})
+        self.request = make_jwt_request(jwt_token)
 
         patcher = patch(
             'lti_consumer.plugin.compat.load_enough_xblock',
@@ -2139,42 +2271,49 @@ class TestLti1p3AccessTokenJWK(TestCase):
         """
         Builds a keyset object with the given keys.
         """
-        jwks = KEYS()
-        jwks._keys = keys  # pylint: disable=protected-access
-        return jwks
+        keys_dict = {'keys': []}
+        for key in keys:
+            keys_dict['keys'].append(key._jwk_data)  # pylint: disable=protected-access
+        return PyJWKSet.from_dict(keys_dict)
 
-    @patch("lti_consumer.lti_1p3.key_handlers.load_jwks_from_url")
-    def test_access_token_using_keyset_url(self, load_jwks_from_url):
+    @patch("lti_consumer.lti_1p3.key_handlers.jwt.PyJWKClient.get_jwk_set")
+    def test_access_token_using_keyset_url(self, get_jwk_set):
         """
         Test request using the provider's keyset URL instead of a public key.
         """
-        load_jwks_from_url.return_value = self.make_keyset([self.key])
+        # import pdb; pdb.set_trace()
+        get_jwk_set.return_value = self.make_keyset([self.key])
         response = self.xblock.lti_1p3_access_token(self.request)
-        load_jwks_from_url.assert_called_once_with("http://tool.example/keyset")
+        get_jwk_set.assert_called_once()
         self.assertEqual(response.status_code, 200)
 
-    @patch("lti_consumer.lti_1p3.key_handlers.load_jwks_from_url")
-    def test_access_token_using_keyset_url_with_empty_keys(self, load_jwks_from_url):
+    @patch("lti_consumer.lti_1p3.key_handlers.jwt.PyJWKClient.get_jwk_set")
+    def test_access_token_using_keyset_url_with_empty_keys(self, get_jwk_set):
         """
         Test request where the provider's keyset URL returns an empty list of keys.
         """
-        load_jwks_from_url.return_value = self.make_keyset([])
+        # get_jwk_set.return_value = self.make_keyset([])
+        get_jwk_set.side_effect = jwt.exceptions.PyJWKSetError
         response = self.xblock.lti_1p3_access_token(self.request)
         self.assertEqual(response.status_code, 400)
         self.assertJSONEqual(response.content, {"error": "invalid_client"})
 
-    @patch("lti_consumer.lti_1p3.key_handlers.load_jwks_from_url")
-    def test_access_token_using_keyset_url_with_wrong_keys(self, load_jwks_from_url):
+    @patch("lti_consumer.lti_1p3.key_handlers.jwt.PyJWKClient.get_jwk_set")
+    def test_access_token_using_keyset_url_with_wrong_keys(self, get_jwk_set):
         """
         Test request where the provider's keyset URL returns wrong keys.
         """
-        key = RSAKey(key=RSA.generate(2048), kid="2")
-        load_jwks_from_url.return_value = self.make_keyset([key])
+        rsa_key = RSA.generate(2048).export_key('PEM')
+        private_key = self.algo_obj.prepare_key(rsa_key)
+        private_jwk = json.loads(self.algo_obj.to_jwk(private_key))
+        private_jwk['kid'] = 2
+        key = PyJWK.from_dict(private_jwk)
+        get_jwk_set.return_value = self.make_keyset([key])
         response = self.xblock.lti_1p3_access_token(self.request)
         self.assertEqual(response.status_code, 400)
         self.assertJSONEqual(response.content, {"error": "invalid_client"})
 
-    @patch("jwkest.jwk.request")
+    @patch("requests.get")
     def test_access_token_using_keyset_url_that_fails(self, request):
         """
         Test request where the provider's keyset URL request fails.
@@ -2184,7 +2323,7 @@ class TestLti1p3AccessTokenJWK(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertJSONEqual(response.content, {'error': 'invalid_client'})
 
-    @patch("jwkest.jwk.request")
+    @patch("requests.get")
     def test_access_token_using_keyset_url_with_invalid_contents(self, request):
         """
         Test request where the provider's keyset URL doesn't return valid JSON.

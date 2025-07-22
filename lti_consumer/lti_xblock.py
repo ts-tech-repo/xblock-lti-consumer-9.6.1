@@ -86,6 +86,7 @@ from .utils import (
     external_user_id_1p1_launches_enabled,
     database_config_enabled,
     EXTERNAL_ID_REGEX,
+    external_multiple_launch_urls_enabled,
 )
 
 log = logging.getLogger(__name__)
@@ -94,8 +95,7 @@ DOCS_ANCHOR_TAG_OPEN = (
     "<a "
     "target='_blank' "
     "href='"
-    "http://edx.readthedocs.org"
-    "/projects/open-edx-building-and-running-a-course/en/latest/exercises_tools/lti_component.html"
+    "https://docs.openedx.org/en/latest/educators/concepts/exercise_tools/about_lti_component.html"
     "'>"
 )
 
@@ -396,19 +396,6 @@ class LtiConsumerXBlock(StudioEditableXBlockMixin, XBlock):
         scope=Scope.settings
     )
 
-    # DEPRECATED - These variables were moved to the LtiConfiguration Model
-    lti_1p3_client_id = String(
-        display_name=_("LTI 1.3 Block Client ID - DEPRECATED"),
-        default='',
-        scope=Scope.settings,
-        help=_("DEPRECATED - This is now stored in the LtiConfiguration model."),
-    )
-    lti_1p3_block_key = String(
-        display_name=_("LTI 1.3 Block Key - DEPRECATED"),
-        default='',
-        scope=Scope.settings
-    )
-
     # Switch to enable/disable the LTI Advantage Deep linking service
     lti_advantage_deep_linking_enabled = Boolean(
         display_name=_("Deep linking"),
@@ -660,7 +647,7 @@ class LtiConsumerXBlock(StudioEditableXBlockMixin, XBlock):
                         ask_to_send_email="False"
                         enable_processors="True"
                         launch_target="new_window"
-                        launch_url="https://lti.tools/saltire/tp" />
+                        launch_url="https://saltire.lti.app/tool?norefresh" />
 
                     <lti_consumer
                         display_name="LTI Consumer - IFrame"
@@ -670,7 +657,7 @@ class LtiConsumerXBlock(StudioEditableXBlockMixin, XBlock):
                         enable_processors="True"
                         description=""
                         launch_target="iframe"
-                        launch_url="https://lti.tools/saltire/tp" />
+                        launch_url="https://saltire.lti.app/tool?norefresh" />
                 </sequence_demo>
              '''),
         ]
@@ -728,8 +715,9 @@ class LtiConsumerXBlock(StudioEditableXBlockMixin, XBlock):
         # This validation is just for the Unit page in Studio; we don't want to block users from saving
         # a new LTI ID before they've added it to advanced settings, but we do want to warn them about it.
         # If we put this check in validate_field_data(), the settings editor wouldn't let them save changes.
-        if self.lti_version == "lti_1p1" and self.lti_id:
-            lti_passport_ids = [lti_passport.split(':')[0].strip() for lti_passport in self.course.lti_passports]
+        course = self.course
+        if course and self.lti_version == "lti_1p1" and self.lti_id:
+            lti_passport_ids = [lti_passport.split(':')[0].strip() for lti_passport in course.lti_passports]
             if self.lti_id.strip() not in lti_passport_ids:
                 validation.add(ValidationMessage(ValidationMessage.WARNING, str(
                     _("The specified LTI ID is not configured in this course's Advanced Settings.")
@@ -860,24 +848,37 @@ class LtiConsumerXBlock(StudioEditableXBlockMixin, XBlock):
         Get system user role.
         """
         user = self.runtime.service(self, 'user').get_current_user()
-        if not user.opt_attrs["edx-platform.is_authenticated"]:
+        if not user.opt_attrs.get("edx-platform.is_authenticated"):
             raise LtiError(self.ugettext("Could not get user data for current request"))
 
         return user.opt_attrs.get('edx-platform.user_role', 'student')
+
+    @property
+    def user_is_staff(self):
+        """
+        Get system user's is_staff flag.
+        """
+        user = self.runtime.service(self, "user").get_current_user()
+        return (
+            user.opt_attrs.get("edx-platform.is_authenticated", False) and
+            user.opt_attrs.get("edx-platform.user_is_staff", False)
+        )
 
     @property
     def course(self):
         """
         Return course by course id.
         """
-        return self.runtime.modulestore.get_course(self.scope_ids.usage_id.context_key)
+        return compat.get_course_by_id(self.scope_ids.usage_id.context_key)
 
     @property
     def lti_provider_key_secret(self):
         """
         Obtains client_key and client_secret credentials from current course.
         """
-        for lti_passport in self.course.lti_passports:
+        course = self.course
+        lti_passports = course.lti_passports if course else []
+        for lti_passport in lti_passports:
             try:
                 # NOTE While unpacking the lti_passport by using ":" as delimiter, first item will be lti_id,
                 #  last item will be client_secret and the rest are considered as client_key.
@@ -1087,7 +1088,7 @@ class LtiConsumerXBlock(StudioEditableXBlockMixin, XBlock):
 
         custom_parameters['custom_component_display_name'] = str(self.display_name)
 
-        if self.due:
+        if getattr(self, 'due', None):
             custom_parameters.update({
                 'custom_component_due_date': self.due.strftime('%Y-%m-%d %H:%M:%S')
             })
@@ -1138,7 +1139,7 @@ class LtiConsumerXBlock(StudioEditableXBlockMixin, XBlock):
         """
         user = self.runtime.service(self, 'user').get_current_user()
 
-        if not user.opt_attrs["edx-platform.is_authenticated"]:
+        if not user.opt_attrs.get("edx-platform.is_authenticated"):
             raise LtiError(self.ugettext("Could not get user data for current request"))
 
         user_data = {
@@ -1158,6 +1159,38 @@ class LtiConsumerXBlock(StudioEditableXBlockMixin, XBlock):
 
         return user_data
 
+    def _add_author_view(self, context, loader, fragment):
+        """
+        Adds the "author view" content to the given fragment.
+
+        Assumes that the CSS/JS will be added by the caller.
+        """
+        # Runtime import since this will only run in the
+        # Open edX LMS/Studio environments.
+        # pylint: disable=import-outside-toplevel
+        from lti_consumer.api import get_lti_1p3_launch_info
+
+        if not context:
+            context = {}
+
+        # Retrieve LTI 1.3 Launch information
+        launch_data = self.get_lti_1p3_launch_data()
+        context.update(
+            get_lti_1p3_launch_info(
+                launch_data,
+            )
+        )
+
+        # Render template
+        fragment.add_content(
+            loader.render_django_template(
+                '/templates/html/lti_1p3_studio.html',
+                context,
+                i18n_service=self.runtime.service(self, 'i18n')
+            ),
+        )
+        return fragment
+
     def studio_view(self, context):
         """
         Get Studio View fragment
@@ -1166,7 +1199,12 @@ class LtiConsumerXBlock(StudioEditableXBlockMixin, XBlock):
         fragment = super().studio_view(context)
 
         fragment.add_javascript(loader.load_unicode("static/js/xblock_studio_view.js"))
-        fragment.initialize_js('LtiConsumerXBlockInitStudio')
+        js_context = {
+            "EXTERNAL_MULTIPLE_LAUNCH_URLS_ENABLED": external_multiple_launch_urls_enabled(
+                self.scope_ids.usage_id.course_key
+            )
+        }
+        fragment.initialize_js('LtiConsumerXBlockInitStudio', js_context)
 
         return fragment
 
@@ -1181,29 +1219,11 @@ class LtiConsumerXBlock(StudioEditableXBlockMixin, XBlock):
         if self.lti_version == "lti_1p1":
             return self.student_view(context)
 
-        # Runtime import since this will only run in the
-        # Open edX LMS/Studio environments.
-        # pylint: disable=import-outside-toplevel
-        from lti_consumer.api import get_lti_1p3_launch_info
-
-        # Retrieve LTI 1.3 Launch information
-        launch_data = self.get_lti_1p3_launch_data()
-        context.update(
-            get_lti_1p3_launch_info(
-                launch_data,
-            )
-        )
-
         # Render template
         fragment = Fragment()
         loader = ResourceLoader(__name__)
-        fragment.add_content(
-            loader.render_django_template(
-                '/templates/html/lti_1p3_studio.html',
-                context,
-                i18n_service=self.runtime.service(self, 'i18n')
-            ),
-        )
+        self._add_author_view(context, loader, fragment)
+
         fragment.add_css(loader.load_unicode('static/css/student.css'))
         fragment.add_javascript(loader.load_unicode('static/js/xblock_lti_consumer.js'))
         statici18n_js_url = self._get_statici18n_js_url()
@@ -1229,8 +1249,16 @@ class LtiConsumerXBlock(StudioEditableXBlockMixin, XBlock):
         """
         fragment = Fragment()
         loader = ResourceLoader(__name__)
+        context = context or {}
         context.update(self._get_context_for_template())
+
+        # Prepend the author view for LTI1.3 when rendering student view to staff users in Studio.
+        # This is needed so course staff can see the author view parameters when configuring within Libraries v2
+        if settings.SERVICE_VARIANT != 'lms' and self.lti_version == "lti_1p3" and self.user_is_staff:
+            self._add_author_view(context, loader, fragment)
+
         fragment.add_content(loader.render_mako_template('/templates/html/student.html', context))
+
         fragment.add_css(loader.load_unicode('static/css/student.css'))
         fragment.add_javascript(loader.load_unicode('static/js/xblock_lti_consumer.js'))
         statici18n_js_url = self._get_statici18n_js_url()
@@ -1299,10 +1327,11 @@ class LtiConsumerXBlock(StudioEditableXBlockMixin, XBlock):
             person_name_full=full_name,
         )
 
+        course = self.course
         lti_consumer.set_context_data(
             self.context_id,
-            self.course.display_name_with_default,
-            self.course.display_org_with_default
+            course.display_name_with_default if course else "",
+            course.display_org_with_default if course else "",
         )
 
         if self.has_score:
@@ -1673,12 +1702,10 @@ class LtiConsumerXBlock(StudioEditableXBlockMixin, XBlock):
         Return the title attribute of the context_claim for LTI 1.3 launches. This information is included in the
         launch_data query or form parameter of the LTI 1.3 third-party login initiation request.
         """
-        course_key = self.scope_ids.usage_id.context_key
-        course = compat.get_course_by_id(course_key)
-
+        course = self.course
         return " - ".join([
-            course.display_name_with_default,
-            course.display_org_with_default
+            course.display_name_with_default if course else "",
+            course.display_org_with_default if course else "",
         ])
 
     def _get_lti_block_launch_handler(self):
@@ -1746,7 +1773,7 @@ class LtiConsumerXBlock(StudioEditableXBlockMixin, XBlock):
             'launch_url': launch_url.strip(),
             'lti_1p3_launch_url': lti_1p3_launch_url,
             'element_id': self.scope_ids.usage_id.html_id(),
-            'element_class': self.category,
+            'element_class': getattr(self, 'category', ''),
             'launch_target': self.launch_target,
             'display_name': self.display_name,
             'form_url': lti_block_launch_handler,

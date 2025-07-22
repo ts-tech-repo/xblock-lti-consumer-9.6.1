@@ -16,6 +16,47 @@ Please See the `releases tab <https://github.com/openedx/xblock-lti-consumer/rel
 Unreleased
 ~~~~~~~~~~
 
+9.14.1 - 2025-05-12
+-------------------
+* Add new flag `lti_consumer.enable_external_multiple_launch_urls`.
+* Update logic for retrieving `lti_1p3_launch_url` from `LtiConfiguration` model.
+* Make `lti_1p3_launch_url` field visible in studio settings when the feature course flag is enabled.
+
+9.14.0 - 2025-04-14
+--------------------
+* Added support for Django 5.2
+
+9.13.4 - 2025-03-21
+-------------------
+* fix: update tests after pyjwt version upgrade
+
+9.13.3 - 2025-03-12
+-------------------
+* Allows LTI Consumer blocks to be used in Libraries v2 learning context
+
+9.13.2 - 2025-01-21
+-------------------
+* Fix Data too long for column 'resource_id'. Increase column size to 255.
+
+9.13.1 - 2025-01-15
+-------------------
+* Fix broken LTI 1.3 launch by adding a `kid` field to both the JWT header and data returned by the public keyset endpoint.
+
+9.13.0 - 2025-01-08
+-------------------
+* Removed pyjwkset package and replace with pyjwt package
+
+9.12.1 - 2024-12-19
+-------------------
+* Update lti_url in readme for testing LTI 1.1/1.2.
+
+9.12.0 - 2024-11-14
+-------------------
+* Dropped support for Python 3.8 and added support for Python 3.12.
+* Removed importlib-metadata<7 pin from constraints as it's unpin issue was closed.
+* Updated pylintrc file with latest version of edx-lint.
+* Fixed app_label error for model named CourseAllowPIISharingInLTIFlag.
+
 9.11.3 - 2024-05-30
 -------------------
 * Remove utf-8 encoding for user full name
@@ -38,7 +79,7 @@ Unreleased
 * BREAKING CHANGE: This version breaks translations with Quince and earlier releases.
 * Adding python 3.11 support. Dropping django32 support.
 
-9.9.0 (2024-01-24)
+9.9.0 - 2024-01-24
 ---------------------------
 * XBlockI18NService js translations support
 

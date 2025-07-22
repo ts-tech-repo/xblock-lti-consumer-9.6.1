@@ -18,7 +18,7 @@ Installation
 
 For details regarding how to deploy this or any other XBlock in the lms instance, see the `installing-the-xblock`_ documentation.
 
-.. _installing-the-xblock: https://edx.readthedocs.io/projects/xblock-tutorial/en/latest/edx_platform/devstack.html#installing-the-xblock
+.. _installing-the-xblock: https://docs.tutor.edly.io/configuration.html#installing-extra-xblocks-and-requirements
 
 Installing in Docker Devstack
 -----------------------------
@@ -72,7 +72,7 @@ One Time Setup
   cd xblock-lti-consumer
 
   # Set up a virtualenv using virtualenvwrapper with the same name as the repo and activate it
-  mkvirtualenv -p python3.8 xblock-lti-consumer
+  mkvirtualenv -p python3.11 xblock-lti-consumer
 
 
 Every time you develop something in this repo
@@ -152,7 +152,7 @@ http://lti.tools/saltire/ provides a "Test Tool Provider" service that allows
 you to see messages sent by an LTI consumer.
 
 We have some useful documentation on how to set this up here:
-http://edx.readthedocs.io/projects/open-edx-building-and-running-a-course/en/latest/exercises_tools/lti_component.html#lti-authentication-information
+https://docs.openedx.org/en/latest/educators/how-tos/course_development/exercise_tools/set_up_lti_1_1_component.html
 
 1. In Studio Advanced settings, set the value of the "LTI Passports" field to "test:test:secret" -
    this will set the OAuth client key and secret used to send a message to the test LTI provider.
@@ -160,7 +160,11 @@ http://edx.readthedocs.io/projects/open-edx-building-and-running-a-course/en/lat
    as seen above).  Make a unit, select "Advanced", then "LTI Consumer".
 3. Click edit and fill in the following fields:
    ``LTI ID``: "test"
-   ``LTI URL``: "https://lti.tools/saltire/tp"
+   ``LTI URL``: "https://saltire.lti.app/tool"
+   **Note:** If you are using more than one same LTI xblocks in the same unit, 
+   please append the `norefresh` parameter to the LTI URL to avoid any 
+   potential failures. Then LTI URL will look like this: 
+   `https://saltire.lti.app/tool?norefresh`.
 4. Click save.  The unit should refresh and you should see "Passed" in the "Verification" field of
    the message tab in the LTI Tool Provider emulator.
 5. Click the "Publish" button.
@@ -220,6 +224,8 @@ Instructions:
 
 #. Publish block, log into LMS and navigate to the LTI block page.
 #. Click ``Send Request`` and verify that the LTI launch was successful.
+
+See also https://docs.openedx.org/en/latest/educators/how-tos/course_development/exercise_tools/set_up_lti_1_3_component.html
 
 
 LTI Advantage Features
@@ -286,6 +292,9 @@ How to Setup
     - Enabled: True
 4. Create a new external LTI configuration and use it in the XBlock.
    This is explained in the README of the `openedx-ltistore`_ repository.
+
+5. (Optional) Allows overriding of the `lti_1p3_launch_url` per block:
+   - Waffle flag: `lti_consumer.enable_external_multiple_launch_urls`
 
 .. _openedx-ltistore: https://github.com/open-craft/openedx-ltistore
 

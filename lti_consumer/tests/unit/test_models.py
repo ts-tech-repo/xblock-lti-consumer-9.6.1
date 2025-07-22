@@ -2,16 +2,14 @@
 Unit tests for LTI models.
 """
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch, call
 
 import ddt
 from Cryptodome.PublicKey import RSA
 from django.core.exceptions import ValidationError
 from django.test.testcases import TestCase
-from django.utils import timezone
 from edx_django_utils.cache import RequestCache
-from jwkest.jwk import RSAKey
 from ccx_keys.locator import CCXBlockUsageLocator
 from opaque_keys.edx.locator import CourseLocator
 
@@ -32,13 +30,8 @@ class TestLtiConfigurationModel(TestCase):
     def setUp(self):
         super().setUp()
 
-        self.rsa_key_id = "1"
         # Generate RSA and save exports
         rsa_key = RSA.generate(2048)
-        self.key = RSAKey(
-            key=rsa_key,
-            kid=self.rsa_key_id
-        )
         self.public_key = rsa_key.publickey().export_key()
 
         self.xblock_attributes = {
@@ -83,6 +76,7 @@ class TestLtiConfigurationModel(TestCase):
         self.lti_1p3_config_external = LtiConfiguration.objects.create(
             version=LtiConfiguration.LTI_1P3,
             config_store=LtiConfiguration.CONFIG_EXTERNAL,
+            location=self.xblock.scope_ids.usage_id,
         )
 
         self.lti_1p1_external = LtiConfiguration.objects.create(
@@ -160,11 +154,13 @@ class TestLtiConfigurationModel(TestCase):
         LtiConfiguration.CONFIG_EXTERNAL,
     )
     @patch('lti_consumer.models.get_external_config_from_filter')
-    def test_lti_consumer_ags_enabled(self, config_store, filter_mock):
+    @patch('lti_consumer.models.external_multiple_launch_urls_enabled')
+    def test_lti_consumer_ags_enabled(self, config_store, external_multiple_launch_urls_enabled_mock, filter_mock):
         """
         Check if LTI AGS is properly included when block is graded.
         """
         filter_mock.return_value = {'lti_advantage_ags_mode': 'programmatic'}
+        external_multiple_launch_urls_enabled_mock.return_value = False
         config = self._get_1p3_config(
             config_store=config_store,
             lti_advantage_ags_mode='programmatic'
@@ -213,10 +209,12 @@ class TestLtiConfigurationModel(TestCase):
         LtiConfiguration.CONFIG_EXTERNAL,
     )
     @patch('lti_consumer.models.get_external_config_from_filter')
-    def test_lti_consumer_ags_declarative(self, config_store, filter_mock):
+    @patch('lti_consumer.models.external_multiple_launch_urls_enabled')
+    def test_lti_consumer_ags_declarative(self, config_store, external_multiple_launch_urls_enabled, filter_mock):
         """
         Check that a LineItem is created if AGS is set to the declarative mode.
         """
+        external_multiple_launch_urls_enabled.return_value = False
         filter_mock.return_value = {'lti_advantage_ags_mode': 'declarative'}
         self.xblock.lti_advantage_ags_mode = 'declarative'
 
@@ -252,11 +250,13 @@ class TestLtiConfigurationModel(TestCase):
         LtiConfiguration.CONFIG_EXTERNAL,
     )
     @patch('lti_consumer.models.get_external_config_from_filter')
-    def test_lti_consumer_deep_linking_enabled(self, config_store, filter_mock):
+    @patch('lti_consumer.models.external_multiple_launch_urls_enabled')
+    def test_lti_consumer_deep_linking_enabled(self, config_store, external_multiple_launch_urls_enabled, filter_mock):
         """
         Check if LTI DL is properly instanced when configured.
         """
         filter_mock.return_value = {'lti_advantage_deep_linking_enabled': True}
+        external_multiple_launch_urls_enabled.return_value = False
         config = self._get_1p3_config(
             config_store=config_store,
             lti_advantage_deep_linking_enabled=True
@@ -535,6 +535,27 @@ class TestLtiConfigurationModel(TestCase):
             f'Failed to query children CCX LTI configurations: '
             f'Failed to parse main LTI configuration location: {self.lti_1p3_config.location}'
         )
+
+    @patch('lti_consumer.models.get_external_config_from_filter')
+    @patch('lti_consumer.models.external_multiple_launch_urls_enabled')
+    def test_external_lti_consumer_1p3_returns_launch_url_from_block(
+        self,
+        external_multiple_launch_urls_enabled,
+        filter_mock
+    ):
+        """
+        Verify that the external LTI consumer uses the block's launch URL when multiple launch URLs are enabled.
+
+        When the `external_multiple_launch_urls_enabled` flag is True, the consumer's
+        `launch_url` should be set to the `lti_1p3_launch_ur`l` from the loaded block rather than
+        the default URL provided by the external configuration.
+        """
+        external_multiple_launch_urls_enabled.return_value = True
+        filter_mock.return_value = {
+            'lti_1p3_launch_url': 'http://launch-url-from-config.example/launch',
+        }
+        consumer = self.lti_1p3_config_external.get_lti_consumer()
+        self.assertEqual(consumer.launch_url, self.xblock.lti_1p3_launch_url)
 
 
 class TestLtiAgsLineItemModel(TestCase):

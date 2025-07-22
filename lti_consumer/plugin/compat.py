@@ -56,6 +56,16 @@ ENABLE_EXTERNAL_USER_ID_1P1_LAUNCHES = 'enable_external_user_id_1p1_launches'
 # .. toggle_warning: None.
 ENABLE_DATABASE_CONFIG = 'enable_database_config'
 
+# .. toggle_name: lti_consumer.enable_external_multiple_launch_urls
+# .. toggle_implementation: CourseWaffleFlag
+# .. toggle_default: False
+# .. toggle_description: Enables support for multiple external launch URLs in LTI configurations.
+# .. toggle_use_cases: open_edx
+# .. toggle_creation_date: 2025-04-04
+# .. toggle_tickets: None
+# .. toggle_warning: None.
+ENABLE_EXTERNAL_MULTIPLE_LAUNCH_URLS = 'enable_external_multiple_launch_urls'
+
 
 def get_external_config_waffle_flag():
     """
@@ -81,6 +91,15 @@ def get_database_config_waffle_flag():
     return CourseWaffleFlag(f'{WAFFLE_NAMESPACE}.{ENABLE_DATABASE_CONFIG}', __name__)
 
 
+def get_external_multiple_launch_urls_waffle_flag():  # pragma: nocover
+    """
+    Import and return Waffle flag for enabling multiple launch URLs with the external LTI configurations.
+    """
+    # pylint: disable=import-error,import-outside-toplevel
+    from openedx.core.djangoapps.waffle_utils import CourseWaffleFlag
+    return CourseWaffleFlag(f'{WAFFLE_NAMESPACE}.{ENABLE_EXTERNAL_MULTIPLE_LAUNCH_URLS}', __name__)
+
+
 def load_enough_xblock(location):  # pragma: nocover
     """
     Load enough of an xblock to read from for LTI values stored on the block.
@@ -89,9 +108,14 @@ def load_enough_xblock(location):  # pragma: nocover
     """
     # pylint: disable=import-error,import-outside-toplevel
     from xmodule.modulestore.django import modulestore
+    from openedx.core.djangoapps.xblock import api as xblock_api
 
-    # Retrieve block from modulestore
-    return modulestore().get_item(location)
+    # Retrieve course block from modulestore
+    if isinstance(location.context_key, CourseKey):
+        return modulestore().get_item(location)
+    # Retrieve library block from the XBlock API
+    else:
+        return xblock_api.load_block(location, None)
 
 
 def load_block_as_user(location):  # pragma: nocover
@@ -223,17 +247,14 @@ def get_course_by_id(course_key):  # pragma: nocover
     """
     Import and run `get_course_by_id` from LMS
 
-    TODO: Once the LMS has fully switched over to this new path [1],
-    we can remove the legacy (LMS) import support here.
-
-    - [1] https://github.com/openedx/edx-platform/pull/27289
+    Returns None if the provided key is not a CourseKey,
+    e.g the block is used in a library learning context.
     """
-    # pylint: disable=import-outside-toplevel
-    try:
-        from openedx.core.lib.courses import get_course_by_id as lms_get_course_by_id
-    except ImportError:
-        from lms.djangoapps.courseware.courses import get_course_by_id as lms_get_course_by_id
-    return lms_get_course_by_id(course_key)
+    # pylint: disable=import-error,import-outside-toplevel
+    from openedx.core.lib.courses import get_course_by_id as lms_get_course_by_id
+    if isinstance(course_key, CourseKey):
+        return lms_get_course_by_id(course_key)
+    return None
 
 
 def user_course_access(*args, **kwargs):  # pragma: nocover
